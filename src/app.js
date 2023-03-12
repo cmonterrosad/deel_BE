@@ -1,6 +1,6 @@
 const express = require("express");
 const bodyParser = require("body-parser");
-const { sequelize, Profile, Job } = require("./model");
+const { sequelize } = require("./model");
 const { getProfile } = require("./middleware/getProfile");
 const { Op } = require("sequelize");
 const app = express();
@@ -9,7 +9,7 @@ app.set("sequelize", sequelize);
 app.set("models", sequelize.models);
 
 /**
- * FIX ME!
+ * 
  * @returns contract by id
  */
 app.get("/contracts/:id", getProfile, async (req, res) => {
@@ -21,6 +21,11 @@ app.get("/contracts/:id", getProfile, async (req, res) => {
   if (!contract) return res.status(404).end();
   res.json(contract);
 });
+
+/**
+ * Returns a list of contracts belonging to a user (client or contractor)
+ * .The list should only contain non terminated contracts.
+ */
 app.get("/contracts", getProfile, async (req, res) => {
   const { Contract } = req.app.get("models");
   const contract = await Contract.findAll({
@@ -32,6 +37,9 @@ app.get("/contracts", getProfile, async (req, res) => {
   if (!contract) return res.status(404).end();
   res.json(contract);
 });
+/**
+ * Get all unpaid jobs for a user (either a client or contractor), for active contracts only.
+ */
 app.get("/jobs/unpaid", getProfile, async (req, res) => {
   const { Job } = req.app.get("models");
   const { Contract } = req.app.get("models");
@@ -54,6 +62,10 @@ app.get("/jobs/unpaid", getProfile, async (req, res) => {
   if (!jobs) return res.status(404).end();
   res.json(jobs);
 });
+/**
+ * Pay for a job, a client can only pay if his balance >= the amount to pay.
+ * The amount should be moved from the client's balance to the contractor balance.
+ */
 app.post("/jobs/:job_id/pay", getProfile, async (req, res) => {
   const { Job } = req.app.get("models");
   const { Contract } = req.app.get("models");
@@ -96,6 +108,10 @@ app.post("/jobs/:job_id/pay", getProfile, async (req, res) => {
   res.json(job);
 });
 
+/**
+ * Deposits money into the the the balance of a client.
+ *  A client can't deposit more than 25% his total of jobs to pay. (at the deposit moment)
+ */
 app.post("/balances/deposit/:userId", getProfile, async (req, res) => {
   const { Job } = req.app.get("models");
   const { Contract } = req.app.get("models");
@@ -136,6 +152,10 @@ app.post("/balances/deposit/:userId", getProfile, async (req, res) => {
   res.status(200).end();
 });
 
+/**
+ * Returns the profession that earned the most money (sum of jobs paid)
+ *  for any contactor that worked in the query time range.
+ */
 app.get("/admin/best-profession", async (req, res) => {
     const { Job } = req.app.get("models");
     const { Contract } = req.app.get("models");
@@ -176,6 +196,10 @@ app.get("/admin/best-profession", async (req, res) => {
     
     res.json(map).end();
   });
+  /**
+   * returns the clients the paid the most for jobs in the query time period.
+   * Limit query parameter should be applied, default limit is 2.
+   */
   app.get("/admin/best-client", async (req, res) => {
     const { Job } = req.app.get("models");
     const { Contract } = req.app.get("models");
