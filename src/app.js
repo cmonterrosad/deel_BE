@@ -99,16 +99,17 @@ app.post("/jobs/:job_id/pay", getProfile, async (req, res) => {
 app.post("/balances/deposit/:userId", getProfile, async (req, res) => {
   const { Job } = req.app.get("models");
   const { Contract } = req.app.get("models");
-  const { job_id } = req.params;
-  console.log(req.params);
+  const { Profile } = req.app.get("models");
+  const { userId } = req.params;
+  const profile = await Profile.findOne({where:{id:userId}});
+  if(!profile) return res.status(404).end();
   const jobsTotalBalance = await Job.findOne({
     include: {
       model: Contract,
       required: true,
       where: {
         [Op.or]: [
-          { ClientId: req.profile.id },
-          { ContractorId: req.profile.id },
+          { ClientId: userId },
         ],
         status: { [Op.not]: "terminated" },
       },
@@ -119,7 +120,6 @@ app.post("/balances/deposit/:userId", getProfile, async (req, res) => {
     },
   });
   if (!jobsTotalBalance) return res.status(404).end();
-  console.log(deposit);
   const {
     dataValues: { totalJobs },
   } = jobsTotalBalance;
@@ -130,19 +130,17 @@ app.post("/balances/deposit/:userId", getProfile, async (req, res) => {
       .json({ error: "Deposit amount is more that 25% of total jobs to pay" })
       .end();
   }
-  const profile = req.profile;
+  
   profile.balance = deposit;
   await profile.save({ profile });
-  res.json(jobsTotalBalance).end();
+  res.status(200).end();
 });
 
-app.get("/best-profession", async (req, res) => {
+app.get("/admin/best-profession", async (req, res) => {
     const { Job } = req.app.get("models");
     const { Contract } = req.app.get("models");
     const {Profile} = req.app.get('models')
     const { start,end } = req.query;
-    console.log(start);
-    console.log(end);
     const jobsTotalBalance = await Job.findAll({
       include: {
         model: Contract,
@@ -170,32 +168,52 @@ app.get("/best-profession", async (req, res) => {
       },
     });
     if (!jobsTotalBalance) return res.status(404).end();
-    res.json(jobsTotalBalance).end();
+    const map = jobsTotalBalance.map(jobs => ({
+        profession:jobs.Contract.Contractor.profession,
+        fullName:jobs.Contract.Contractor.firstName + " " + jobs.Contract.Contractor.lastName,
+        paid:jobs.dataValues.totalJobs
+    }))
+    
+    res.json(map).end();
   });
-
-app.get("/admin/best-profession?start=<date>&end=<date>", async (req, res) => {
-  const { Job } = req.app.get("models");
-  const { Contract } = req.app.get("models");
-  const {Profile} = req.app.get('models')
-  const { deposit } = req.body;
-  const jobsTotalBalance = await Job.findOne({
-    include: {
-      model: Contract,
-      required: true,
+  app.get("/admin/best-client", async (req, res) => {
+    const { Job } = req.app.get("models");
+    const { Contract } = req.app.get("models");
+    const {Profile} = req.app.get('models')
+    let { start,end,limit } = req.query;
+    if(limit == null){
+        limit = 2;
+    }
+    const jobsTotalBalance = await Job.findAll({
+      include: {
+        attributes:['ClientId'],
+        model: Contract,
+        required: true,
+        where: {
+          status: { [Op.not]: "terminated" },
+        },
+        include:{
+          attributes:['firstName','lastName'],
+          model: Profile,
+          as:'Client',
+          required: true
+        },
+      },
+      group: "ClientId",
+      attributes: [[sequelize.fn("SUM", sequelize.col("price")), "totalJobs"]],
+      limit,
       where: {
-        status: { [Op.not]: "terminated" },
+        paid:  { [Op.eq]: true },
+        paymentDate: {[Op.between]: [start,end]}
+  
       },
-      include:{
-        model: Profile,
-        required: true
-      },
-    },
-    where: {
-      paid: {  [Op.eq]: true },
-
-    },
+    });
+    if (!jobsTotalBalance) return res.status(404).end();
+    const map = jobsTotalBalance.map(jobs => ({
+        id:jobs.Contract.ClientId,
+        fullName:jobs.Contract.Client.firstName + " " + jobs.Contract.Client.lastName,
+        paid:jobs.dataValues.totalJobs
+    }))
+    res.json(map).end();
   });
-  if (!jobsTotalBalance) return res.status(404).end();
-  res.json(jobsTotalBalance).end();
-});
 module.exports = app;
