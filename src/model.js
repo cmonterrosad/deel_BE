@@ -1,8 +1,9 @@
+require('dotenv').config();
 const Sequelize = require('sequelize');
 
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: './database.sqlite3'
+  storage: process.env.NODE_ENV == 'test' ? 'databaseTest.sqlite3':'database.sqlite3',
 });
 
 class Profile extends Sequelize.Model {}
@@ -42,6 +43,10 @@ Contract.init(
     },
     status:{
       type: Sequelize.ENUM('new','in_progress','terminated')
+    },
+    balance:{
+      type: Sequelize.DECIMAL(12,2),
+      allowNull: true
     }
   },
   {
